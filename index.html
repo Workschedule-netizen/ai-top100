@@ -55,8 +55,6 @@ a{color:var(--quote)}
 .lang button+button{border-left:1px solid var(--line)}
 .lang button[aria-pressed="true"]{background:var(--pill);color:var(--pill-ink);font-weight:700}
 .cur{border:1px solid var(--line);background:var(--panel);border-radius:99px;padding:3px 8px;font-size:12.5px}
-.taxl{display:inline-flex;gap:4px;align-items:center;font-size:12.5px;color:var(--ink);cursor:pointer}
-.taxl input{margin:0;accent-color:var(--accent)}
 html[lang="zh-Hant"]{--sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Noto Sans SC",system-ui,sans-serif}
 html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-serif}
 
@@ -253,7 +251,6 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
       <button class="linkbtn" id="methodBtn" type="button" data-i="method">评分方法与来源</button>
       <span class="lang" id="langSeg" role="group" data-i-al="langAria"><button type="button" data-lang="zh-Hant" lang="zh-Hant">繁</button><button type="button" data-lang="zh-Hans" lang="zh-Hans">简</button><button type="button" data-lang="en" lang="en">EN</button></span>
       <select class="cur" id="cur" data-i-al="curAria"><option value="TWD">NT$ TWD</option><option value="USD">US$ USD</option><option value="CNY">¥ CNY</option><option value="EUR">€ EUR</option></select>
-      <label class="taxl" id="taxWrap" data-i-ti="taxTitle"><input type="checkbox" id="tax"><span data-i="taxLbl">含 5% 税</span></label>
       <button class="theme" id="themeBtn" type="button" data-i-al="themeAria"></button>
     </div>
   </header>
@@ -546,8 +543,6 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
     dark: ["☾ 夜间模式", "☾ 夜間模式", "☾ Dark"],
     langAria: ["语言", "語言", "Language"],
     curAria: ["币种", "幣別", "Currency"],
-    taxLbl: ["含 5% 税", "含 5% 稅", "+5% VAT"],
-    taxTitle: ["台湾对境外数字服务课 5% 营业税，勾选后价格会加上这 5%。", "台灣對境外數位服務課徵 5% 營業稅，勾選後價格會加上這 5%。", "Taiwan charges 5% VAT on foreign digital services; check to include it."],
     tabs: ["分页", "分頁", "Tabs"],
     tabTool: ["工具 TOP50", "工具 TOP50", "Tools TOP50"],
     tabSkill: ["技能 TOP50", "技能 TOP50", "Skills TOP50"],
@@ -620,7 +615,6 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
     annualOnly: ["年付价", "年付價", "billed yearly"],
     fxNote: ["按约 1 USD = {0} TWD、1 EUR = {1} TWD、1 CNY = {2} TWD 换算（{3}），四舍五入；{4}各地区、App Store / Google Play 与促销价格可能不同，以官网为准。", "按約 1 USD = {0} TWD、1 EUR = {1} TWD、1 CNY = {2} TWD 換算（{3}），四捨五入；{4}各地區、App Store / Google Play 與促銷價格可能不同，以官網為準。", "Converted at about 1 USD = {0} TWD, 1 EUR = {1} TWD, 1 CNY = {2} TWD ({3}) and rounded; {4}regional, App Store / Google Play and promo prices may differ — check the official site."],
     taxIn: ["已含 5% 营业税；", "已含 5% 營業稅；", "includes 5% VAT; "],
-    taxOut: ["未含税；", "未含稅；", "excludes tax; "],
     checked: ["价格核对于 {0}。", "價格核對於 {0}。", "Prices checked {0}."],
     origNote: ["官方说明：", "官方說明：", "Notes: "],
     tip: ["上手建议", "上手建議", "Getting started"],
@@ -629,7 +623,6 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
     copy: ["复制", "複製", "Copy"],
     visitSkill: ["查看技能页面", "查看技能頁面", "View skill page"],
     visitSite: ["访问官网", "造訪官網", "Visit website"],
-    copyLink: ["复制这一项的链接", "複製這一項的連結", "Copy link to this item"],
     sideRank: ["{0}榜第 {1} 名", "{0}榜第 {1} 名", "{0} board #{1}"],
     hotRk: [" · 爆红", " · 爆紅", " · hot"],
     clearSearch: ["清除搜索", "清除搜尋", "Clear search"],
@@ -674,7 +667,6 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
     cmpPartial: ["部分项目在前 20 名之外，只有简介，没有完整的功能与优缺点。", "部分項目在前 20 名之外，只有簡介，沒有完整的功能與優缺點。", "Some items are outside the top 20 and only have a summary, without full features or pros and cons."],
     copyFail: ["复制失败，请手动选取", "複製失敗，請手動選取", "Copy failed; please select it manually"],
     copiedCmd: ["已复制安装命令", "已複製安裝指令", "Install command copied"],
-    copiedLink: ["已复制链接，别人打开会直接看到这一项", "已複製連結，別人打開會直接看到這一項", "Link copied; it opens straight to this item"],
     favAdded: ["已加入收藏", "已加入收藏", "Added to favorites"],
     favRemoved: ["已取消收藏", "已取消收藏", "Removed from favorites"],
     favCleared: ["已清空收藏", "已清空收藏", "Favorites cleared"],
@@ -780,7 +772,8 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
   const FX = PR.fx;
   const CURS = { TWD: "NT$", USD: "US$", CNY: "¥", EUR: "€" };
   let cur = store.get("ai100-cur", "TWD"); if (!CURS[cur] || !FX[cur]) cur = "TWD";
-  let tax = store.get("ai100-tax", false) === true;
+  /* 所有价格一律含台湾 5% 营业税 */
+  const tax = true;
   const conv = (p, c, noTax) => p * FX[c || "USD"] * (tax && !noTax ? 1.05 : 1) / FX[cur];
   function money(v, c){
     const sym = CURS[c || cur];
@@ -1015,7 +1008,7 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
     $("sideBody").scrollTop = 0;
   }
   function fxNote(){
-    return t("fxNote", FX.USD, FX.EUR, FX.CNY, PR.fxDate || "", cur === "TWD" ? (tax ? t("taxIn") : t("taxOut")) : "") + ' ' + t("checked", (data && (data.pricesCheckedOn || data.updatedAt)) || "");
+    return t("fxNote", FX.USD, FX.EUR, FX.CNY, PR.fxDate || "", t("taxIn")) + ' ' + t("checked", (data && (data.pricesCheckedOn || data.updatedAt)) || "");
   }
   function renderDetail(){
     if (!sel){ setSide("empty", "", "", '<div class="empty">'+t("pickLeft")+'</div>'); return; }
@@ -1051,7 +1044,7 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
     if (it.install) body += isCmd(it.install)
       ? '<div class="sec"><h3>'+t("install")+'</h3><div class="code"><code>'+esc(it.install)+'</code><button class="btn sm" type="button" data-copy="'+esc(it.install)+'">'+t("copy")+'</button></div></div>'
       : '<div class="sec"><h3>'+t("install")+'</h3><p>'+esc(tx(it.install))+'</p></div>';
-    body += '<div class="acts"><a class="btn dark" href="'+esc(safeUrl(it.url))+'" target="_blank" rel="noopener">'+(skill ? t("visitSkill") : t("visitSite"))+' ↗</a><button class="btn" type="button" data-link="'+esc(it.id)+'">'+t("copyLink")+'</button></div>';
+    body += '<div class="acts"><a class="btn dark" href="'+esc(safeUrl(it.url))+'" target="_blank" rel="noopener">'+(skill ? t("visitSkill") : t("visitSite"))+' ↗</a></div>';
     setSide("detail", it.hotOnly ? t("hotChip") : t("sideRank", typeN(it.type), it.rank), ctl, body);
   }
   function resCard(it, why, ai){
@@ -1174,8 +1167,7 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
     document.querySelectorAll("[data-i-al]").forEach(el => { el.setAttribute("aria-label", t(el.dataset.iAl)); });
     document.querySelectorAll("[data-i-ti]").forEach(el => { el.title = t(el.dataset.iTi); });
     document.querySelectorAll("#langSeg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === lang)));
-    $("cur").value = cur; $("tax").checked = tax;
-    $("taxWrap").hidden = cur !== "TWD";
+    $("cur").value = cur;
     paintTheme();
   }
   function rerender(){
@@ -1202,7 +1194,6 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
   }));
   $("langSeg").addEventListener("click", e => { const b = e.target.closest("[data-lang]"); if (b) setLang(b.dataset.lang); });
   $("cur").addEventListener("change", e => { cur = e.target.value; store.set("ai100-cur", cur); rerender(); });
-  $("tax").addEventListener("change", e => { tax = e.target.checked; store.set("ai100-tax", tax); rerender(); });
   $("chips").addEventListener("click", e => {
     const h = e.target.closest("[data-hot]"); if (h){ hotView = !hotView; cat = ""; renderList(); return; }
     const c = e.target.closest("[data-cat]"); if (c){ hotView = false; cat = c.dataset.cat; renderList(); }
@@ -1223,7 +1214,6 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
     const el = e.target;
     const cl = el.closest("[data-close]"); if (cl){ $(cl.dataset.close).hidden = true; return; }
     const cp = el.closest("[data-copy]"); if (cp){ copy(cp.dataset.copy, t("copiedCmd")); return; }
-    const lk = el.closest("[data-link]"); if (lk){ copy(location.href.split("#")[0] + "#" + lk.dataset.link, t("copiedLink")); return; }
     const fv = el.closest("[data-fav]"); if (fv){ toggleFav(fv.dataset.fav); toast(favs.includes(fv.dataset.fav) ? t("favAdded") : t("favRemoved")); renderList(); renderDetail(); return; }
     const uf = el.closest("[data-unfav]"); if (uf){
       const id = uf.dataset.unfav; favs = favs.filter(x => x !== id); store.set("ai100-fav", favs); toast(t("favRemoved"));
