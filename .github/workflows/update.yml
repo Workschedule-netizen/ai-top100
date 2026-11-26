@@ -2,8 +2,8 @@ name: 更新 AI TOP100 榜单
 
 on:
   schedule:
-    # 每 2 小时一次（时间是 UTC；第 17 分钟执行，避开整点高峰）
-    - cron: "17 */2 * * *"
+    # 每 12 小时一次（时间是 UTC 0:17 与 12:17，即台北时间 8:17 与 20:17；第 17 分钟执行，避开整点高峰）
+    - cron: "17 */12 * * *"
   workflow_dispatch: {}
 
 permissions:
