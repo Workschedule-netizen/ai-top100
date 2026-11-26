@@ -150,9 +150,15 @@ try {
       switch ($s.mode) {
         'semrush' { $s.ev = [Math]::Round($r.v / 1e6, 2); $it.metric = "Semrush $($r.ym)：$(Format-Count $r.v)次" }
         'chatbot' {
-          $g = [Math]::Sqrt(($r.v / 1e6) * [double]$s.sw); $s.ev = [Math]::Round($g, 2)
-          $swYm = if ($s.swYm) { $s.swYm } else { '2026-09' }      # swYm 由每月更新写入
-          $it.metric = "Semrush $($r.ym)：$(Format-Count $r.v)次；Similarweb $($swYm)：约 $(Format-Count ([double]$s.sw * 1e6))次；几何平均约 $(Format-Count ($g * 1e6))次"
+          # Similarweb 数字是手动查的（swYm = 资料月份）；比 Semrush 旧 3 个月以上就不再混用，只用 Semrush，避免旧数据拖着排名
+          $swYm = if ($s.swYm) { $s.swYm } else { '2026-09' }
+          if ($swYm -ge ([DateTime]::ParseExact($r.ym, 'yyyy-MM', $null).AddMonths(-3).ToString('yyyy-MM'))) {
+            $g = [Math]::Sqrt(($r.v / 1e6) * [double]$s.sw); $s.ev = [Math]::Round($g, 2)
+            $it.metric = "Semrush $($r.ym)：$(Format-Count $r.v)次；Similarweb $($swYm)：约 $(Format-Count ([double]$s.sw * 1e6))次；几何平均约 $(Format-Count ($g * 1e6))次"
+          } else {
+            $s.ev = [Math]::Round($r.v / 1e6, 2)
+            $it.metric = "Semrush $($r.ym)：$(Format-Count $r.v)次（Similarweb 资料已超过 3 个月，暂只用 Semrush）"
+          }
         }
         'survey' {
           $s.ev = [Math]::Round([Math]::Max([double]$s.survey, $r.v / 1e6), 2)
