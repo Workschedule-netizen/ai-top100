@@ -159,7 +159,8 @@ try {
   }
 
   # ---------- 写回 index.html ----------
-  $json = ($data | ConvertTo-Json -Depth 12 -Compress).Replace('</', '<\/')
+  # 所有 < 都写成 <，资料里就算出现 <!--、<script、</script> 也拆不开网页
+  $json = ($data | ConvertTo-Json -Depth 12 -Compress).Replace('<', '<')
   [IO.File]::WriteAllText($target, $html.Substring(0, $a) + $json + $html.Substring($b), $utf8)
   Write-Log "网页已更新（$($data.updatedTime)）"
 } catch {

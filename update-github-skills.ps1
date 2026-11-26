@@ -153,7 +153,8 @@ try {
     stars = $stars
     trans = $transOut
   }
-  $json = ($data | ConvertTo-Json -Depth 6 -Compress).Replace('</', '<\/')
+  # 所有 < 都写成 <：GitHub 专案介绍是别人写的，含 <!--<script 会让整页脚本失效
+  $json = ($data | ConvertTo-Json -Depth 6 -Compress).Replace('<', '<')
   $a = $html.IndexOf($tag) + $tag.Length; $b = $html.IndexOf('</script>', $a)
   [IO.File]::WriteAllText($target, $html.Substring(0, $a) + $json + $html.Substring($b), $utf8)
   Write-Log "已更新：Trending $okPages/$($langs.Count) 页、AI 项目 $($ai.Count) 个、爆红 $([Math]::Min(12, $recent7.Count)) 个、精选星数 $starOk/$(@($repos).Count) 个、新翻译 $script:transNew 则"
