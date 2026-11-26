@@ -26,7 +26,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./update-ranking.ps1
 
+      # GitHub Skills 推荐：本周 GitHub 前十、爆红 Skills、精选星数
+      # 不论榜单那步成功与否都会执行；这步失败也不影响榜单提交
+      - name: 更新 GitHub Skills 推荐
+        if: always()
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./update-github-skills.ps1
+
       - name: 提交更新
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
