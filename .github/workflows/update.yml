@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       monthly:
-        description: "这次也强制执行每月更新（价格、流量、汇率）"
+        description: "这次也强制更新汇率"
         type: boolean
         default: false
 
@@ -21,18 +21,16 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
-      # 每月第一次执行：汇率、Similarweb 流量、官方价格（后两项要设定 ANTHROPIC_API_KEY）；其他时候自动跳过
-      # 放在榜单之前，榜单那步会用新的数字重算排名；这步失败也不影响后面
-      - name: 每月更新（价格、流量、汇率）
+      # 每月第一次执行：更新汇率（免费公开汇率，不需要金钥）；其他时候自动跳过，这步失败也不影响后面
+      - name: 每月更新汇率
         continue-on-error: true
-        timeout-minutes: 40
+        timeout-minutes: 5
         shell: pwsh
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           FORCE_MONTHLY: ${{ inputs.monthly }}
         run: |
           if ($env:FORCE_MONTHLY -eq 'true') { ./update-monthly.ps1 -Force } else { ./update-monthly.ps1 }
