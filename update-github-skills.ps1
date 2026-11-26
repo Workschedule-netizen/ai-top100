@@ -2,6 +2,7 @@
 # 1. 抓 GitHub Trending（本周、全部语言共 25 页）→ 只收 AI 编程代理、技能与开发工具 → 依本周涨星取前十
 # 2. 抓近 7 天新上线的 Skills（爆红），以及近 30 天的（前十不足时补上）
 # 3. 更新 65 个精选 Skills 的 GitHub 星数
+# 4. 不在精选里的项目，把 GitHub 英文介绍翻成中文（记住译文，原文没变就不再重翻）
 # 结果写进 index.html 里的 gh-trend 资料区块，由 GitHub Actions 提交后，Cloudflare Pages 自动发布。
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -47,6 +48,28 @@ function Get-Trending([string]$html) {
   , $out
 }
 
+# ---------- 翻译：GitHub 原文介绍 → 简体中文（网页再依语言转繁体）。先用 MyMemory，失败改用 Google；都失败就保留原文 ----------
+$script:trans = @{}      # repo → @{ s = 原文; z = 译文 }，存在页面资料里，下次原文没变就直接沿用
+$script:transNew = 0
+function Get-Zh([string]$repo, [string]$text) {
+  if (-not $text) { return '' }
+  if ($text -match '[一-鿿]') { return $text }      # 本来就是中文
+  $k = $repo.ToLower()
+  if ($script:trans.ContainsKey($k) -and $script:trans[$k].s -eq $text) { return $script:trans[$k].z }
+  $src = if ($text.Length -gt 480) { $text.Substring(0, 480) } else { $text }
+  $q = [uri]::EscapeDataString($src); $zh = ''
+  try {
+    $r = Invoke-RestMethod "https://api.mymemory.translated.net/get?q=$q&langpair=en|zh-CN" -TimeoutSec 20
+    if ([int]$r.responseStatus -eq 200 -and $r.responseData.translatedText -notmatch 'MYMEMORY WARNING') { $zh = [Net.WebUtility]::HtmlDecode($r.responseData.translatedText) }
+  } catch { }
+  if (-not $zh) {
+    try { $r = Invoke-RestMethod "https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q=$q" -TimeoutSec 20; $zh = ($r[0] | ForEach-Object { $_[0] }) -join '' } catch { }
+  }
+  Start-Sleep -Milliseconds 300
+  if ($zh -and $zh -match '[一-鿿]') { $script:trans[$k] = @{ s = $text; z = $zh }; $script:transNew++; return $zh }
+  ''
+}
+
 function Find-Skills([int]$days) {
   $since = [DateTime]::UtcNow.AddDays(-$days).ToString('yyyy-MM-dd')
   $map = @{}
@@ -69,6 +92,12 @@ try {
   if (-not (Test-Path $target)) { throw '仓库里找不到 index.html' }
   $html = [IO.File]::ReadAllText($target, [Text.Encoding]::UTF8)
   if ($html.IndexOf($tag) -lt 0) { throw '网页里找不到 gh-trend 资料区块' }
+  # 读回上一次的译文
+  try {
+    $a0 = $html.IndexOf($tag) + $tag.Length
+    $old = $html.Substring($a0, $html.IndexOf('</script>', $a0) - $a0).Replace('<\/', '</') | ConvertFrom-Json
+    if ($old.trans) { foreach ($p in $old.trans.PSObject.Properties) { $script:trans[$p.Name] = @{ s = $p.Value.s; z = $p.Value.z } } }
+  } catch { }
 
   # ---------- 1. GitHub Trending（本周） ----------
   $best = @{}; $okPages = 0
@@ -99,6 +128,18 @@ try {
     try { $stars[$repo.ToLower()] = [int](Invoke-RestMethod "https://api.github.com/repos/$repo" -Headers $gh -TimeoutSec 20).stargazers_count; $starOk++ } catch { }
   }
 
+  # ---------- 4. 不在精选里的项目，介绍翻成中文 ----------
+  $curated = @{}; foreach ($r in $repos) { $curated[$r.ToLower()] = 1 }
+  $viral = @($recent7 | Select-Object -First 12)
+  $used = @{}
+  foreach ($x in @($top) + $viral) {
+    if ($curated.ContainsKey($x.repo.ToLower())) { continue }
+    $x | Add-Member -Force -NotePropertyName dz -NotePropertyValue (Get-Zh $x.repo $x.d)
+    $used[$x.repo.ToLower()] = 1
+  }
+  $transOut = [ordered]@{}
+  foreach ($k in $script:trans.Keys) { if ($used.ContainsKey($k)) { $transOut[$k] = $script:trans[$k] } }
+
   # ---------- 写回 index.html ----------
   $data = [ordered]@{
     t = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
@@ -106,13 +147,14 @@ try {
     source = $(if ($ai.Count) { 'trending' } else { 'search' })
     langs = $okPages
     top = @($top)
-    viral = @($recent7 | Select-Object -First 12)
+    viral = $viral
     stars = $stars
+    trans = $transOut
   }
   $json = ($data | ConvertTo-Json -Depth 6 -Compress).Replace('</', '<\/')
   $a = $html.IndexOf($tag) + $tag.Length; $b = $html.IndexOf('</script>', $a)
   [IO.File]::WriteAllText($target, $html.Substring(0, $a) + $json + $html.Substring($b), $utf8)
-  Write-Log "已更新：Trending $okPages/$($langs.Count) 页、AI 项目 $($ai.Count) 个、爆红 $([Math]::Min(12, $recent7.Count)) 个、精选星数 $starOk/$(@($repos).Count) 个"
+  Write-Log "已更新：Trending $okPages/$($langs.Count) 页、AI 项目 $($ai.Count) 个、爆红 $([Math]::Min(12, $recent7.Count)) 个、精选星数 $starOk/$(@($repos).Count) 个、新翻译 $script:transNew 则"
 } catch {
   Write-Log "更新失败：$($_.Exception.Message)"
   exit 1
