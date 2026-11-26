@@ -1,4 +1,4 @@
-# AI 工具与技能 TOP100 —— 云端自动更新脚本（GitHub Actions 版，不需要开电脑、不需要 Claude）
+﻿# AI 工具与技能 TOP100 —— 云端自动更新脚本（GitHub Actions 版，不需要开电脑、不需要 Claude）
 # 每次执行：抓 skills.sh 安装量、ClawHub 下载量和 GitHub 星标，按公式重算技能榜。
 # 每天第一次执行：另外抓 Semrush 网站流量，重算工具榜，并把名次变化基准往前推一天。
 # 结果直接写回仓库里的 index.html，由 GitHub Actions 提交后，Cloudflare Pages 自动发布。
@@ -53,7 +53,11 @@ try {
       $h = @{}
       try {
         $c = Get-Page "https://www.skills.sh/$repo"
-        $pattern = 'href="/' + [regex]::Escape($repo) + '/([^"/]+)".{0,400}?font-mono text-sm text-foreground">([\d\.]+[KMB]?)<'
+        # repo 改名时 skills.sh 会显示新名字；照网页的正式网址抓，并在日志提醒改数据
+        $canon = [regex]::Match($c, 'rel="canonical" href="https://www\.skills\.sh/([^/"]+/[^/"]+)"')
+        $real = if ($canon.Success) { $canon.Groups[1].Value } else { $repo }
+        if ($real -ne $repo) { Write-Log "skills.sh 显示 $repo 已改名为 $real，请更新数据里的 src.sk" }
+        $pattern = 'href="/' + [regex]::Escape($real) + '/([^"/]+)".{0,400}?font-mono text-sm text-foreground">([\d\.]+[KMB]?)<'
         foreach ($m in [regex]::Matches($c, $pattern, 'IgnoreCase,Singleline')) { $h[$m.Groups[1].Value] = ConvertTo-Number $m.Groups[2].Value }
       } catch { Write-Log "skills.sh 读取失败：$repo（$($_.Exception.Message)）" }
       $repoCache[$repo] = $h
@@ -94,7 +98,15 @@ try {
         else { $inst = ($h.Values | Measure-Object -Maximum).Maximum }
       }
     }
-    if ($s.gh) { $st = Get-Stars $s.gh; if ($st) { $stars = $st } }
+    if ($s.gh) {
+      $st = Get-Stars $s.gh
+      if ($st) { $stars = $st; $s | Add-Member -Force -NotePropertyName st -NotePropertyValue $st }
+      elseif ($s.st) { $stars = [double]$s.st }      # 这次读不到就沿用上次的星数，避免排名因一次失败乱跳
+      else {                                          # 还没存过星数：从上次的依据文字读回来（例如“GitHub 32.7 万星”）
+        $om = [regex]::Match([string]$it.metric, 'GitHub ([\d\.,]+)\s*(万|亿)?星')
+        if ($om.Success) { $stars = [double]($om.Groups[1].Value -replace ',', '') * $(switch ($om.Groups[2].Value) { '万' { 1e4 } '亿' { 1e8 } default { 1 } }) }
+      }
+    }
     if ($inst) {
       $s.ev = [Math]::Round([Math]::Max($inst, [Math]::Sqrt($inst * $stars * 5)))
       $label = if ($s.claw) { 'ClawHub 下载' } elseif (-not $s.names) { 'skills.sh 主技能安装' } elseif (@($s.names).Count -gt 1) { 'skills.sh 单项最高安装' } else { 'skills.sh 安装' }
@@ -103,6 +115,16 @@ try {
     }
   }
   Write-Log "技能数据已刷新 $skillsUpdated / 50 项"
+
+  # ---------- 热门新秀：GitHub 星数（网页会在推荐理由后面显示“目前”） ----------
+  $hotStars = 0
+  foreach ($h in @($data.hot)) {
+    $hm = [regex]::Match([string]$h.url, 'github\.com/([^/#?]+/[^/#?]+)')
+    if (-not $hm.Success) { continue }
+    $st = Get-Stars $hm.Groups[1].Value
+    if ($st) { $h | Add-Member -Force -NotePropertyName stars -NotePropertyValue ([int]$st); $hotStars++ }
+  }
+  Write-Log "热门新秀星数已刷新 $hotStars 项"
 
   # ---------- 工具：Semrush 网站流量（每天一次） ----------
   $toolsUpdated = 0
@@ -129,9 +151,13 @@ try {
         'semrush' { $s.ev = [Math]::Round($r.v / 1e6, 2); $it.metric = "Semrush $($r.ym)：$(Format-Count $r.v)次" }
         'chatbot' {
           $g = [Math]::Sqrt(($r.v / 1e6) * [double]$s.sw); $s.ev = [Math]::Round($g, 2)
-          $it.metric = "Semrush $($r.ym)：$(Format-Count $r.v)次；Similarweb 2026-09：约 $(Format-Count ([double]$s.sw * 1e6))次；几何平均约 $(Format-Count ($g * 1e6))次"
+          $swYm = if ($s.swYm) { $s.swYm } else { '2026-09' }      # swYm 由每月更新写入
+          $it.metric = "Semrush $($r.ym)：$(Format-Count $r.v)次；Similarweb $($swYm)：约 $(Format-Count ([double]$s.sw * 1e6))次；几何平均约 $(Format-Count ($g * 1e6))次"
         }
-        'survey' { $s.ev = [Math]::Round([Math]::Max([double]$s.survey, $r.v / 1e6), 2) }
+        'survey' {
+          $s.ev = [Math]::Round([Math]::Max([double]$s.survey, $r.v / 1e6), 2)
+          $it.metric = [regex]::Replace($it.metric, '网站 Semrush \d{4}-\d\d：[^，；]+', "网站 Semrush $($r.ym)：$(Format-Count $r.v)次")
+        }
       }
       $toolsUpdated++
     }
@@ -159,8 +185,8 @@ try {
   }
 
   # ---------- 写回 index.html ----------
-  # 所有 < 都写成 <，资料里就算出现 <!--、<script、</script> 也拆不开网页
-  $json = ($data | ConvertTo-Json -Depth 12 -Compress).Replace('<', '<')
+  # 所有 < 都写成 \u003c，资料里就算出现 <!--、<script、</script> 也拆不开网页
+  $json = ($data | ConvertTo-Json -Depth 12 -Compress).Replace('<', '\u003c')
   [IO.File]::WriteAllText($target, $html.Substring(0, $a) + $json + $html.Substring($b), $utf8)
   Write-Log "网页已更新（$($data.updatedTime)）"
 } catch {

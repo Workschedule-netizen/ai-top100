@@ -70,6 +70,23 @@ function Get-Zh([string]$repo, [string]$text) {
   ''
 }
 
+# ---------- 防假冒：有人会给“XX 软件 for Windows 10/11 下载”这种诱饵 repo 挂上 skills 标签冲热门 ----------
+# 规则：介绍不能像破解/下载站，而且 repo 里必须真的有 SKILL.md（技能的标准档案）。查不到就当不合格，宁缺勿滥。
+$junkRx = '(?i)(windows\s*10\s*/\s*11|for\s+windows\s+1[01]|\bcrack(ed)?\b|\bkeygen\b|\bactivator\b|serial\s+key|license\s+key|full\s+version|free\s+download)'
+$script:skillOk = @{}
+function Test-SkillRepo([string]$full, [string]$desc) {
+  if ($desc -match $junkRx) { return $false }
+  $k = $full.ToLower()
+  if ($script:skillOk.ContainsKey($k)) { return $script:skillOk[$k] }
+  $ok = $false
+  try {
+    $t = Invoke-RestMethod "https://api.github.com/repos/$full/git/trees/HEAD?recursive=1" -Headers $gh -TimeoutSec 30
+    $ok = [bool]$t.truncated -or [bool]($t.tree | Where-Object { $_.type -eq 'blob' -and $_.path -match '(^|/)SKILL\.md$' } | Select-Object -First 1)
+  } catch { }
+  $script:skillOk[$k] = $ok
+  $ok
+}
+
 function Find-Skills([int]$days) {
   $since = [DateTime]::UtcNow.AddDays(-$days).ToString('yyyy-MM-dd')
   $map = @{}
@@ -80,7 +97,7 @@ function Find-Skills([int]$days) {
       foreach ($x in $r.items) { $map[$x.full_name.ToLower()] = $x }
     } catch { Write-Log "GitHub 搜索失败：$t（$($_.Exception.Message)）" }
   }
-  $map.Values | Sort-Object stargazers_count -Descending | ForEach-Object {
+  $map.Values | Sort-Object stargazers_count -Descending | Where-Object { Test-SkillRepo $_.full_name $_.description } | ForEach-Object {
     $lic = if ($_.license) { $_.license.spdx_id } else { $null }
     $l = if (-not $lic -or $lic -eq 'NOASSERTION') { 'u' } elseif ($lic -match '^(MIT|Apache|BSD|ISC|Unlicense|MPL|0BSD|CC0|Zlib)') { 'c' } elseif ($lic -match 'GPL') { 'p' } else { 'u' }
     $age = [Math]::Max(1, [int][Math]::Round(([DateTime]::UtcNow - ([DateTime]$_.created_at).ToUniversalTime()).TotalDays))
@@ -111,7 +128,7 @@ try {
     } catch { Write-Log "Trending 读取失败：$(if ($lang) { $lang } else { '总榜' })" }
     Start-Sleep -Milliseconds 400
   }
-  $ai = @($best.Values | Where-Object { ($_.repo -replace '[-_/.]', ' ') + ' ' + $_.d -match $aiRx } | Sort-Object gain -Descending)
+  $ai = @($best.Values | Where-Object { (($_.repo -replace '[-_/.]', ' ') + ' ' + $_.d -match $aiRx) -and ($_.d -notmatch $junkRx) } | Sort-Object gain -Descending)
 
   # ---------- 2. 新上线的 Skills ----------
   $recent30 = @(Find-Skills 30)
@@ -153,8 +170,8 @@ try {
     stars = $stars
     trans = $transOut
   }
-  # 所有 < 都写成 <：GitHub 专案介绍是别人写的，含 <!--<script 会让整页脚本失效
-  $json = ($data | ConvertTo-Json -Depth 6 -Compress).Replace('<', '<')
+  # 所有 < 都写成 \u003c：GitHub 专案介绍是别人写的，含 <!--<script 会让整页脚本失效
+  $json = ($data | ConvertTo-Json -Depth 6 -Compress).Replace('<', '\u003c')
   $a = $html.IndexOf($tag) + $tag.Length; $b = $html.IndexOf('</script>', $a)
   [IO.File]::WriteAllText($target, $html.Substring(0, $a) + $json + $html.Substring($b), $utf8)
   Write-Log "已更新：Trending $okPages/$($langs.Count) 页、AI 项目 $($ai.Count) 个、爆红 $([Math]::Min(12, $recent7.Count)) 个、精选星数 $starOk/$(@($repos).Count) 个、新翻译 $script:transNew 则"
