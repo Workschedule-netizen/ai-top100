@@ -97,6 +97,7 @@ try {
     $a0 = $html.IndexOf($tag) + $tag.Length
     $old = $html.Substring($a0, $html.IndexOf('</script>', $a0) - $a0).Replace('<\/', '</') | ConvertFrom-Json
     if ($old.trans) { foreach ($p in $old.trans.PSObject.Properties) { $script:trans[$p.Name] = @{ s = $p.Value.s; z = $p.Value.z } } }
+    $oldStars = @{}; if ($old.stars) { foreach ($p in $old.stars.PSObject.Properties) { $oldStars[$p.Name] = [int]$p.Value } }
   } catch { }
 
   # ---------- 1. GitHub Trending（本周） ----------
@@ -125,7 +126,8 @@ try {
   $stars = [ordered]@{}; $starOk = 0
   $repos = [regex]::Matches($html, "P_\('[^']*','[^']*','[^']*','[^']*','[a-z]','[^']*',\d,'([^']+)'\)") | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
   foreach ($repo in $repos) {
-    try { $stars[$repo.ToLower()] = [int](Invoke-RestMethod "https://api.github.com/repos/$repo" -Headers $gh -TimeoutSec 20).stargazers_count; $starOk++ } catch { }
+    try { $stars[$repo.ToLower()] = [int](Invoke-RestMethod "https://api.github.com/repos/$repo" -Headers $gh -TimeoutSec 20).stargazers_count; $starOk++ }
+    catch { if ($oldStars -and $oldStars.ContainsKey($repo.ToLower())) { $stars[$repo.ToLower()] = $oldStars[$repo.ToLower()] } }   # 读不到就沿用上次的星数
   }
 
   # ---------- 4. 不在精选里的项目，介绍翻成中文 ----------
