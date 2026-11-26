@@ -181,6 +181,45 @@ try {
   if ($daily) { Update-Rank '工具' }
   $data.items = @(@($data.items | Where-Object { $_.type -eq '工具' } | Sort-Object rank) + @($data.items | Where-Object { $_.type -eq '技能' } | Sort-Object rank))
 
+  # ---------- 每日排名历史（网页的名次走势图、本周飙升榜用；保留 90 天） ----------
+  if ($daily) {
+    $histFile = Join-Path $here 'history.json'
+    try {
+      $dates = New-Object System.Collections.ArrayList; $hr = @{}; $hv = @{}
+      if (Test-Path $histFile) {
+        $old = [IO.File]::ReadAllText($histFile, [Text.Encoding]::UTF8) | ConvertFrom-Json
+        foreach ($d in $old.dates) { [void]$dates.Add([string]$d) }
+        foreach ($p in $old.r.PSObject.Properties) { $hr[$p.Name] = New-Object System.Collections.ArrayList(, @($p.Value)) }
+        foreach ($p in $old.v.PSObject.Properties) { $hv[$p.Name] = New-Object System.Collections.ArrayList(, @($p.Value)) }
+      }
+      if ($dates.Count -and $dates[$dates.Count - 1] -eq $today) {      # 同一天重跑：先拿掉今天旧的一栏
+        $dates.RemoveAt($dates.Count - 1)
+        foreach ($k in @($hr.Keys)) { if ($hr[$k].Count -gt $dates.Count) { $hr[$k].RemoveAt($hr[$k].Count - 1) } }
+        foreach ($k in @($hv.Keys)) { if ($hv[$k].Count -gt $dates.Count) { $hv[$k].RemoveAt($hv[$k].Count - 1) } }
+      }
+      $n = $dates.Count; [void]$dates.Add($today)
+      $byId = @{}; foreach ($it in $data.items) { $byId[$it.id] = $it }
+      foreach ($id in @($hr.Keys) + @($byId.Keys) | Select-Object -Unique) {
+        if (-not $hr.ContainsKey($id)) { $hr[$id] = New-Object System.Collections.ArrayList; $hv[$id] = New-Object System.Collections.ArrayList }
+        if (-not $hv.ContainsKey($id)) { $hv[$id] = New-Object System.Collections.ArrayList }
+        while ($hr[$id].Count -lt $n) { [void]$hr[$id].Add($null) }
+        while ($hv[$id].Count -lt $n) { [void]$hv[$id].Add($null) }
+        $it = $byId[$id]
+        [void]$hr[$id].Add($(if ($it) { [int]$it.rank } else { $null }))
+        [void]$hv[$id].Add($(if ($it -and $it.src.ev) { [double]$it.src.ev } else { $null }))
+      }
+      $cut = [Math]::Max(0, $dates.Count - 90)
+      $outR = [ordered]@{}; $outV = [ordered]@{}
+      foreach ($id in ($hr.Keys | Sort-Object)) {
+        $outR[$id] = @($hr[$id] | Select-Object -Skip $cut); $outV[$id] = @($hv[$id] | Select-Object -Skip $cut)
+        if (@($outR[$id] | Where-Object { $_ -ne $null }).Count -eq 0) { $outR.Remove($id); $outV.Remove($id) }   # 90 天都不在榜上就移除
+      }
+      $hist = [ordered]@{ dates = @($dates | Select-Object -Skip $cut); r = $outR; v = $outV }
+      [IO.File]::WriteAllText($histFile, ($hist | ConvertTo-Json -Depth 5 -Compress), $utf8)
+      Write-Log "排名历史已记录（共 $(@($hist.dates).Count) 天）"
+    } catch { Write-Log "排名历史记录失败：$($_.Exception.Message)" }
+  }
+
   $data.updatedAt = $today
   $data.updatedTime = $now.ToString('yyyy-MM-dd HH:mm')
   if ($daily) {

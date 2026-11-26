@@ -93,6 +93,14 @@ html[lang="en"]{--sans:system-ui,-apple-system,"Segoe UI","Noto Sans SC",sans-se
 .chip[aria-pressed="true"]{background:var(--pill);border-color:var(--pill);color:var(--pill-ink);font-weight:700}
 .chip.hotchip{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,var(--line))}
 .chip.hotchip[aria-pressed="true"]{background:var(--bad);border-color:var(--bad);color:#fff}
+.chip.surgechip{color:var(--skillc);border-color:color-mix(in srgb,var(--skillc) 40%,var(--line))}
+.chip.surgechip[aria-pressed="true"]{background:var(--skillc);border-color:var(--skillc);color:#fff}
+.trend svg{display:block;width:100%;height:auto;overflow:visible}
+.trend .tl{fill:none;stroke:var(--accent);stroke-width:2.4;stroke-linejoin:round;stroke-linecap:round}
+.trend .ta{fill:color-mix(in srgb,var(--accent) 14%,transparent)}
+.trend .tg{stroke:var(--line);stroke-width:1}
+.trend text{font:600 10.5px var(--mono,ui-monospace,monospace);fill:var(--muted)}
+.trend .te{fill:var(--accent);font-weight:800;font-size:12px}
 
 /* 榜单 */
 .rows{flex:1;overflow-y:auto;min-height:0}
@@ -868,6 +876,7 @@ body.gh-on .seg button[data-gh]::before{background:var(--pill)}
   const EN = readJson("i18n-en") || { items: {}, hot: {} };
   const PR = readJson("price-tiers") || { fx: { TWD: 1, USD: 31.9, EUR: 37.2, CNY: 4.47 }, tiers: {} };
   let data = null, items = [], view = "工具", cat = "", price = "", sortBy = "rank", hotView = false, sel = null, sample = null, q = "";
+  let surgeView = false, HIST = null;   // HIST：history.json（每日名次 r 与热度依据数值 v）
   let favs = store.get("ai100-fav", []), cmp = store.get("ai100-cmp", []);
 
   /* ---------- 语言：界面文字用对照表，资料内容简转繁用 OpenCC，英文用 i18n-en 区块 ---------- */
@@ -925,6 +934,12 @@ body.gh-on .seg button[data-gh]::before{background:var(--pill)}
     favTotal: ["订阅试算：若每项都选最便宜的付费方案，每月合计约 <b>{0}</b>（{1} 项需付费；按量计费不计入）", "訂閱試算：若每項都選最便宜的付費方案，每月合計約 <b>{0}</b>（{1} 項需付費；按量計費不計入）", "Subscription estimate: picking the cheapest paid plan of each comes to about <b>{0}</b>/mo ({1} paid items; usage-based fees excluded)"],
     favNoPaid: ["收藏中的项目都可以免费使用（或只按量计费）。", "收藏中的項目都可以免費使用（或只按量計費）。", "Everything in your favorites is free to use (or usage-based only)."],
     hotChip: ["近期爆红", "近期爆紅", "Trending"],
+    surgeChip: ["📈 本周飙升", "📈 本週飆升", "📈 Rising this week"],
+    surgeChipM: ["📈 本月飙升", "📈 本月飆升", "📈 Rising this month"],
+    surgeSub: ["{3} 天成长 +{0}% · 名次 #{1} → #{2}", "{3} 天成長 +{0}% · 名次 #{1} → #{2}", "+{0}% in {3} days · rank #{1} → #{2}"],
+    trendH: ["名次走势（近 30 天）", "名次走勢（近 30 天）", "Rank trend (last 30 days)"],
+    trendWait: ["资料累积中，过几天就会出现走势图。", "資料累積中，過幾天就會出現走勢圖。", "Collecting data — the chart appears in a few days."],
+    trendBest: ["期间最佳 #{0}", "期間最佳 #{0}", "Best #{0}"],
     all: ["全部", "全部", "All"],
     noMatch: ["没有符合条件的项目，换个类别或价格试试。", "沒有符合條件的項目，換個類別或價格試試。", "Nothing matches. Try another category or price."],
     pickLeft: ["点左侧任一项查看详情", "點左側任一項查看詳情", "Pick an item on the left to see details"],
@@ -1308,6 +1323,37 @@ body.gh-on .seg button[data-gh]::before{background:var(--pill)}
     }).filter(r => r.s >= 2).sort((a, b) => b.s - a.s || (b.it.details ? 1 : 0) - (a.it.details ? 1 : 0) || (b.it.score || 0) - (a.it.score || 0));
   }
 
+  /* ---------- 飙升榜：技能看近 7 天、工具看近 30 天（网站流量每月才更新）热度依据数值成长最多的项目 ---------- */
+  const surgeDays = ty => ty === "工具" ? 30 : 7;
+  function surgeList(ty){
+    if (!HIST || !HIST.dates || HIST.dates.length < 2) return [];
+    const n = HIST.dates.length, i0 = Math.max(0, n - 1 - surgeDays(ty));
+    return items.filter(it => it.type === ty).map(it => {
+      const v = (HIST.v || {})[it.id], r = (HIST.r || {})[it.id];
+      if (!v || !r || !v[i0] || !v[n - 1] || !r[i0] || !r[n - 1]) return null;
+      const g = (v[n - 1] / v[i0] - 1) * 100;
+      return g >= 0.5 ? { it, g, r0: r[i0], r1: r[n - 1] } : null;
+    }).filter(Boolean).sort((a, b) => b.g - a.g).slice(0, 8);
+  }
+  /* ---------- 名次走势图（近 30 天） ---------- */
+  function trendHTML(it){
+    if (!HIST || !HIST.r || it.hotOnly) return "";
+    const all = (HIST.r[it.id] || []).map((r, i) => ({ r, d: HIST.dates[i] })).slice(-30).filter(p => p.r);
+    if (all.length < 2) return '<div class="sec trend"><h3>'+t("trendH")+'</h3><p class="muted" style="font-size:12.5px">'+t("trendWait")+'</p></div>';
+    const W = 320, H = 96, L = 30, R = 34, T = 10, B = 22, rs = all.map(p => p.r);
+    let lo = Math.min(...rs), hi = Math.max(...rs); if (hi - lo < 2){ lo = Math.max(1, lo - 1); hi = hi + 1; }
+    const x = i => L + i * (W - L - R) / (all.length - 1), y = r => T + (r - lo) * (H - T - B) / (hi - lo);
+    const pts = all.map((p, i) => x(i).toFixed(1) + "," + y(p.r).toFixed(1)).join(" ");
+    const last = all[all.length - 1], md = s => String(s).slice(5);
+    return '<div class="sec trend"><h3>'+t("trendH")+'</h3><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(t("trendH"))+'">'+
+      '<line class="tg" x1="'+L+'" x2="'+(W - R)+'" y1="'+y(lo)+'" y2="'+y(lo)+'"/><line class="tg" x1="'+L+'" x2="'+(W - R)+'" y1="'+y(hi)+'" y2="'+y(hi)+'"/>'+
+      '<text x="'+(L - 6)+'" y="'+(y(lo) + 4)+'" text-anchor="end">#'+lo+'</text><text x="'+(L - 6)+'" y="'+(y(hi) + 4)+'" text-anchor="end">#'+hi+'</text>'+
+      '<polygon class="ta" points="'+x(0)+','+(H - B)+' '+pts+' '+x(all.length - 1)+','+(H - B)+'"/><polyline class="tl" points="'+pts+'"/>'+
+      '<circle cx="'+x(all.length - 1)+'" cy="'+y(last.r)+'" r="4" fill="var(--accent)"/><text class="te" x="'+(x(all.length - 1) + 7)+'" y="'+(y(last.r) + 4)+'">#'+last.r+'</text>'+
+      '<text x="'+L+'" y="'+(H - 4)+'">'+md(all[0].d)+'</text><text x="'+(W - R)+'" y="'+(H - 4)+'" text-anchor="end">'+md(last.d)+'</text>'+
+      '</svg><p class="muted" style="font-size:12px;margin-top:2px">'+t("trendBest", Math.min(...rs))+'</p></div>';
+  }
+
   /* ---------- 列表 ---------- */
   function move(it){
     if (it.isNew || it.hotOnly) return '<span class="mv new">'+t("new")+'</span>';
@@ -1357,13 +1403,20 @@ body.gh-on .seg button[data-gh]::before{background:var(--pill)}
     const list = pool();
     const order = (data.categories && data.categories[view]) || [];
     const cats = order.filter(c => list.some(i => i.category === c));
-    const hl = hotList(view);
+    const hl = hotList(view), sl = surgeList(view);
+    if (!sl.length) surgeView = false;
     $("chips").innerHTML =
       (hl.length ? '<button type="button" class="chip hotchip" data-hot="1" aria-pressed="'+hotView+'">'+t("hotChip")+' <span class="mono">'+hl.length+'</span></button>' : '') +
-      '<button type="button" class="chip" data-cat="" aria-pressed="'+(!hotView && !cat)+'">'+t("all")+' <span class="mono">'+list.length+'</span></button>' +
-      cats.map(c => '<button type="button" class="chip" data-cat="'+esc(c)+'" aria-pressed="'+(!hotView && cat === c)+'">'+esc(catN(c))+' <span class="mono">'+list.filter(i => i.category === c).length+'</span></button>').join("");
+      (sl.length ? '<button type="button" class="chip surgechip" data-surge="1" aria-pressed="'+surgeView+'">'+t(view === "工具" ? "surgeChipM" : "surgeChip")+' <span class="mono">'+sl.length+'</span></button>' : '') +
+      '<button type="button" class="chip" data-cat="" aria-pressed="'+(!hotView && !surgeView && !cat)+'">'+t("all")+' <span class="mono">'+list.length+'</span></button>' +
+      cats.map(c => '<button type="button" class="chip" data-cat="'+esc(c)+'" aria-pressed="'+(!hotView && !surgeView && cat === c)+'">'+esc(catN(c))+' <span class="mono">'+list.filter(i => i.category === c).length+'</span></button>').join("");
     const head = '<div class="row head" aria-hidden="true"><span>'+t("hRank")+'</span><span>'+t("hName")+'</span><span>'+t("hPrice")+'</span><span style="text-align:right">'+t("hHeat")+'</span></div>';
     renderPriceSel();
+    if (surgeView){        // 本周飙升：照成长率排序，说明列显示成长与名次变化
+      const s = sl.filter(x => priceOk(x.it));
+      $("rows").innerHTML = head + (s.length ? s.map(x => row(x.it, t("surgeSub", x.g.toFixed(1), x.r0, x.r1, surgeDays(view)))).join("") : '<div class="empty">'+t("noMatch")+'</div>');
+      return;
+    }
     const shown = sorted((hotView ? hl : list.filter(i => !cat || i.category === cat)).filter(priceOk));
     $("rows").innerHTML = head + (shown.length ? shown.map(it => row(it, hotView ? whyN(hotOf(it.id)) : "")).join("") : '<div class="empty">'+t("noMatch")+'</div>');
   }
@@ -1400,6 +1453,7 @@ body.gh-on .seg button[data-gh]::before{background:var(--pill)}
         '<div><span>'+t("hPrice")+'</span><b style="font-family:var(--sans);font-size:15px"><span class="pr '+(PC[it.price] || "fm")+'" style="font-size:15px">'+esc(priceLbl(it) || '—')+'</span></b><span>'+esc(fromTxt(it))+'</span></div>'+
       '</div>'+
       (it.metric ? '<div class="basis">'+t("basis")+esc(metricN(it))+'</div>' : '')+
+      trendHTML(it)+
       (hot ? '<div class="note hot"><b>'+t("hotChip")+'</b><span>'+esc(whyN(hot))+'</span></div>' : '')+
       '<p class="intro">'+esc(d.intro || sm(it) || "")+'</p>';
     if (it.showcase && it.showcase.length){
@@ -1569,7 +1623,7 @@ body.gh-on .seg button[data-gh]::before{background:var(--pill)}
 
   document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
     if (view === b.dataset.view) return;
-    view = b.dataset.view; cat = ""; price = ""; hotView = false; save(); closeSheet();
+    view = b.dataset.view; cat = ""; price = ""; hotView = false; surgeView = false; save(); closeSheet();
     if (view === "工具" || view === "技能") sel = pool()[0] || null;
     else if (view === "收藏") sel = favItems()[0] || null;
     q = ""; $("q").value = "";
@@ -1578,8 +1632,9 @@ body.gh-on .seg button[data-gh]::before{background:var(--pill)}
   $("langSeg").addEventListener("click", e => { const b = e.target.closest("[data-lang]"); if (b) setLang(b.dataset.lang); });
   $("cur").addEventListener("change", e => { cur = e.target.value; store.set("ai100-cur", cur); rerender(); });
   $("chips").addEventListener("click", e => {
-    const h = e.target.closest("[data-hot]"); if (h){ hotView = !hotView; cat = ""; renderList(); return; }
-    const c = e.target.closest("[data-cat]"); if (c){ hotView = false; cat = c.dataset.cat; renderList(); }
+    const h = e.target.closest("[data-hot]"); if (h){ hotView = !hotView; surgeView = false; cat = ""; renderList(); return; }
+    const sg = e.target.closest("[data-surge]"); if (sg){ surgeView = !surgeView; hotView = false; cat = ""; renderList(); return; }
+    const c = e.target.closest("[data-cat]"); if (c){ hotView = false; surgeView = false; cat = c.dataset.cat; renderList(); }
   });
   $("price").addEventListener("change", e => { price = e.target.value; renderList(); });
   $("sort").addEventListener("change", e => { sortBy = e.target.value; renderList(); if (!q) renderDetail(); });
@@ -1650,6 +1705,11 @@ body.gh-on .seg button[data-gh]::before{background:var(--pill)}
   const embedded = readJson("ranking-data");
   if (embedded && embedded.items) useData(embedded, true);
   else { $("rows").innerHTML = '<div class="empty">'+t("loadFail")+'</div>'; $("updated").textContent = t("notLoaded"); }
+  // 名次历史（同网域的 history.json，每 12 小时随更新一起变动）；读不到就不显示走势与飙升榜
+  fetch("history.json?v=" + encodeURIComponent(data ? stamp(data) : Date.now())).then(r => r.ok ? r.json() : null).then(h => {
+    if (!h || !h.dates || !h.r) return;
+    HIST = h; renderList(); if (!q) renderDetail();
+  }).catch(() => {});
   (async () => {
     const claude = window.claude;
     if (!claude || !claude.use) return;
